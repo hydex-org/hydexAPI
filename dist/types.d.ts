@@ -32,6 +32,7 @@ export interface BurnIntent {
     user: string;
     amount: string;
     zcash_address_hash: string;
+    zcash_address_encrypted: string;
     status: BurnStatus;
     solana_burn_txid: string | null;
     zcash_txid: string | null;

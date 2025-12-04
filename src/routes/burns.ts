@@ -68,10 +68,14 @@ burnRouter.post("/", requireAuth, async (req: any, res) => {
         });
     }
 
-    // PRIVACY: Hash the Zcash address - never store plaintext
+    // PRIVACY: Hash the Zcash address for public queries
     const zcash_address_hash = createHash("sha256")
         .update(zcash_address)
         .digest("hex");
+
+    // Encrypt the address for MPC nodes (simple base64 for now - use Arcium in production)
+    // In production: encrypt with MPC cluster's shared public key
+    const zcash_address_encrypted = Buffer.from(zcash_address).toString("base64");
 
     // Create burn intent
     const burn_id = nextBurnId++;
@@ -82,7 +86,8 @@ burnRouter.post("/", requireAuth, async (req: any, res) => {
         user_id: req.user.user_id,
         user,
         amount,
-        zcash_address_hash, // Only the hash, not the actual address
+        zcash_address_hash, // Hash for public reference
+        zcash_address_encrypted, // Encrypted for MPC nodes
         status: "Pending",
         solana_burn_txid: null,
         zcash_txid: null,

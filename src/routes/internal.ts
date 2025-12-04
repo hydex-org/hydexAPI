@@ -337,6 +337,86 @@ internalRouter.get("/burns", requireInternalAuth, async (_req, res) => {
 });
 
 /**
+ * GET /v1/internal/burns/:id/address
+ * Get the encrypted Zcash address for a burn intent (MPC nodes only)
+ * 
+ * This is the critical endpoint that allows MPC nodes to know where to send ZEC.
+ */
+internalRouter.get("/burns/:id/address", requireInternalAuth, async (req, res) => {
+  const burnId = parseInt(req.params.id);
+
+  if (isNaN(burnId)) {
+    return res.status(400).json({
+      error: {
+        code: "INVALID_REQUEST",
+        message: "Invalid burn ID",
+      },
+    });
+  }
+
+  const { getBurn } = await import("./burns.js");
+  const burn = getBurn(burnId);
+
+  if (!burn) {
+    return res.status(404).json({
+      error: {
+        code: "BURN_NOT_FOUND",
+        message: `Burn intent ${burnId} not found`,
+      },
+    });
+  }
+
+  // Only allow fetching address for pending/processing burns
+  if (burn.status !== "Pending" && burn.status !== "Processing") {
+    return res.status(400).json({
+      error: {
+        code: "INVALID_REQUEST",
+        message: `Burn intent ${burnId} is already ${burn.status}`,
+      },
+    });
+  }
+
+  // Decrypt the address (base64 decode for now - Arcium in production)
+  const zcash_address = Buffer.from(burn.zcash_address_encrypted, "base64").toString("utf8");
+
+  console.log(`[Internal] MPC fetched address for burn #${burnId}`);
+
+  res.json({
+    burn_id: burn.burn_id,
+    user: burn.user,
+    amount: burn.amount,
+    zcash_address,
+    zcash_address_hash: burn.zcash_address_hash,
+    status: burn.status,
+    network: burn.network,
+  });
+});
+
+/**
+ * GET /v1/internal/burns/pending
+ * List all pending burns for MPC processing
+ */
+internalRouter.get("/burns/pending", requireInternalAuth, async (_req, res) => {
+  const { getAllBurns } = await import("./burns.js");
+  const burns = getAllBurns();
+
+  const pending = burns.filter(b => b.status === "Pending" || b.status === "Processing");
+
+  res.json({
+    count: pending.length,
+    items: pending.map(b => ({
+      burn_id: b.burn_id,
+      user: b.user,
+      amount: b.amount,
+      zcash_address_hash: b.zcash_address_hash,
+      status: b.status,
+      network: b.network,
+      created_at: b.created_at,
+    })),
+  });
+});
+
+/**
  * Helper: Convert hex string to Uint8Array
  */
 function hexToBytes(hex: string): Uint8Array {

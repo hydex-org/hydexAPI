@@ -53,7 +53,8 @@ export interface BurnIntent {
     user_id: string;
     user: string;
     amount: string;
-    zcash_address_hash: string; // Never store plaintext on server
+    zcash_address_hash: string; // Hash for public queries
+    zcash_address_encrypted: string; // Encrypted for MPC nodes only
     status: BurnStatus;
     solana_burn_txid: string | null;
     zcash_txid: string | null;

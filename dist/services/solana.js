@@ -153,49 +153,36 @@ export class SolanaBridgeClient {
     /**
      * Create burn intent for withdrawal (PRIVACY-PRESERVING)
      *
-     * The Zcash address is encrypted before submission.
-     * Solana only sees an encrypted hash.
+     * The Zcash address is hashed before submission.
+     * Solana stores the hash, MPC nodes receive the actual address off-chain.
      */
     async createBurnIntent(user, amount, zcashAddress) {
-        console.log("Creating encrypted burn intent...");
+        console.log("Creating burn intent...");
         // Get current burn nonce
         const config = await this.program.account.bridgeConfig.fetch(this.bridgeConfigPda);
         const burnId = config.burnNonce.toNumber();
-        // Encrypt Zcash address
-        const { encryptedHash, publicKey, nonce } = this.arcium.encryptZcashAddress(zcashAddress);
-        // Generate computation offset
-        const computationOffset = new anchor.BN(Date.now());
-        // Get Arcium accounts
-        const arciumAccounts = this.arcium.getArciumAccounts(computationOffset, "create_burn_intent");
-        // Derive PDAs
+        // Hash the Zcash address (privacy: actual address sent to MPC off-chain)
+        const { createHash } = await import("crypto");
+        const zcashAddressHash = createHash("sha256")
+            .update(zcashAddress)
+            .digest();
+        // Derive burn intent PDA
         const [burnIntentPda] = PublicKey.findProgramAddressSync([
             Buffer.from("burn-intent"),
             user.toBuffer(),
             new anchor.BN(burnId).toArrayLike(Buffer, "le", 8),
         ], this.programId);
-        const [signPdaAccount] = PublicKey.findProgramAddressSync([Buffer.from("sign")], this.programId);
         // Get user's token account
         const userTokenAccount = await getAssociatedTokenAddress(this.szecMintPda, user);
-        // Build encrypted input
-        const encryptedBurnInput = [Array.from(encryptedHash)];
         const signature = await this.program.methods
-            .burnForWithdrawal(computationOffset, amount, encryptedBurnInput, Array.from(publicKey), new anchor.BN(nonce.toString()))
+            .burnForWithdrawal(amount, Array.from(zcashAddressHash))
             .accountsPartial({
             user,
             bridgeConfig: this.bridgeConfigPda,
             burnIntent: burnIntentPda,
             szecMint: this.szecMintPda,
             userTokenAccount,
-            payer: this.payer.publicKey,
-            signPdaAccount,
-            mxeAccount: arciumAccounts.mxeAccount,
-            mempoolAccount: arciumAccounts.mempoolAccount,
-            executingPool: arciumAccounts.executingPool,
-            computationAccount: arciumAccounts.computationAccount,
-            compDefAccount: arciumAccounts.compDefAccount,
-            clusterAccount: arciumAccounts.clusterAccount,
             tokenProgram: TOKEN_PROGRAM_ID,
-            arciumProgram: arciumAccounts.arciumProgram,
             systemProgram: SystemProgram.programId,
         })
             .signers([this.payer])
@@ -205,41 +192,27 @@ export class SolanaBridgeClient {
     }
     /**
      * Finalize withdrawal after Zcash TX is mined
+     * Called by MPC authority after successful Zcash transaction
      */
-    async finalizeWithdrawal(burnId, user, zcashTxid, mpcAuthority) {
+    async finalizeWithdrawal(burnId, user, zcashTxid, mpcAuthority, success = true) {
         console.log("Finalizing withdrawal...");
-        // Generate computation offset
-        const computationOffset = new anchor.BN(Date.now());
-        // Encrypt the TXID update
-        const { encryptedHash: encryptedTxid, publicKey, nonce } = this.arcium.encryptZcashAddress(Buffer.from(zcashTxid).toString("hex"));
-        // Get Arcium accounts
-        const arciumAccounts = this.arcium.getArciumAccounts(computationOffset, "update_burn_intent");
-        // Derive PDAs
+        // Derive burn intent PDA
         const [burnIntentPda] = PublicKey.findProgramAddressSync([
             Buffer.from("burn-intent"),
             user.toBuffer(),
             new anchor.BN(burnId).toArrayLike(Buffer, "le", 8),
         ], this.programId);
-        const [signPdaAccount] = PublicKey.findProgramAddressSync([Buffer.from("sign")], this.programId);
-        const encryptedUpdate = [Array.from(encryptedTxid)];
+        // Pad or truncate txid to 32 bytes
+        const txidArray = new Uint8Array(32);
+        txidArray.set(zcashTxid.slice(0, 32));
         const signature = await this.program.methods
-            .finalizeWithdrawal(computationOffset, encryptedUpdate, Array.from(publicKey), new anchor.BN(nonce.toString()))
+            .finalizeWithdrawal(Array.from(txidArray), success)
             .accountsPartial({
             authority: mpcAuthority.publicKey,
             bridgeConfig: this.bridgeConfigPda,
             burnIntent: burnIntentPda,
-            payer: this.payer.publicKey,
-            signPdaAccount,
-            mxeAccount: arciumAccounts.mxeAccount,
-            mempoolAccount: arciumAccounts.mempoolAccount,
-            executingPool: arciumAccounts.executingPool,
-            computationAccount: arciumAccounts.computationAccount,
-            compDefAccount: arciumAccounts.compDefAccount,
-            clusterAccount: arciumAccounts.clusterAccount,
-            arciumProgram: arciumAccounts.arciumProgram,
-            systemProgram: SystemProgram.programId,
         })
-            .signers([mpcAuthority, this.payer])
+            .signers([mpcAuthority])
             .rpc({ commitment: "confirmed", skipPreflight: true });
         console.log("  Withdrawal finalized:", signature);
         return signature;

@@ -46,8 +46,8 @@ export declare class SolanaBridgeClient {
     /**
      * Create burn intent for withdrawal (PRIVACY-PRESERVING)
      *
-     * The Zcash address is encrypted before submission.
-     * Solana only sees an encrypted hash.
+     * The Zcash address is hashed before submission.
+     * Solana stores the hash, MPC nodes receive the actual address off-chain.
      */
     createBurnIntent(user: PublicKey, amount: anchor.BN, zcashAddress: string): Promise<{
         burnId: number;
@@ -55,8 +55,9 @@ export declare class SolanaBridgeClient {
     }>;
     /**
      * Finalize withdrawal after Zcash TX is mined
+     * Called by MPC authority after successful Zcash transaction
      */
-    finalizeWithdrawal(burnId: number, user: PublicKey, zcashTxid: Uint8Array, mpcAuthority: Keypair): Promise<string>;
+    finalizeWithdrawal(burnId: number, user: PublicKey, zcashTxid: Uint8Array, mpcAuthority: Keypair, success?: boolean): Promise<string>;
     /**
      * Check if a note commitment has been claimed
      */
