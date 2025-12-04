@@ -1,0 +1,39 @@
+{
+  "server": {
+    "port": 3001,
+    "host": "0.0.0.0"
+  },
+  "solana": {
+    "network": "devnet",
+    "rpc_url": "https://api.devnet.solana.com",
+    "program_id": "5PLQ9ZSbYq4qfYic3dCwyr1BR8GMVfCKWsbTan2VWE45",
+    "keypair_path": "~/.config/solana/id.json"
+  },
+  "arcium": {
+    "enabled": true,
+    "program_id": "Bv3Fb9VjzjWGfX18QTUcVycAfeLoQ5zZN6vv2g3cTZxp"
+  },
+  "enclave": {
+    "url": "http://localhost:8089"
+  },
+  "mpc": {
+    "nodes": [
+      "http://localhost:8080",
+      "http://localhost:8081",
+      "http://localhost:8082"
+    ],
+    "threshold": 2
+  },
+  "security": {
+    "jwt_secret": "change-this-in-production",
+    "internal_api_key": "internal-mpc-key"
+  },
+  "zcash": {
+    "network": "testnet"
+  },
+  "privacy": {
+    "encrypt_attestations": true,
+    "encrypt_zcash_addresses": true,
+    "_comment": "All sensitive data encrypted via Arcium before Solana submission"
+  }
+}
