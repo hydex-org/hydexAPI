@@ -78,10 +78,31 @@ depositRouter.post("/", requireAuth, async (req: any, res) => {
     deposits.set(deposit_id, deposit);
     idempotencyKeys.set(idempotency_key, deposit_id);
 
-    // TODO: In production:
-    // 1. Call enclave to generate UA
-    // 2. Call Solana program to create deposit intent PDA
-    // 3. Update deposit with UA
+    // Call enclave to generate Zcash deposit address
+    try {
+        const ENCLAVE_URL = process.env.ENCLAVE_URL || "http://localhost:8089";
+        const enclaveResponse = await fetch(`${ENCLAVE_URL}/api/v1/generate-address`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                solana_wallet: solana_recipient,
+            }),
+        });
+
+        if (enclaveResponse.ok) {
+            const enclaveData = await enclaveResponse.json();
+            deposit.unified_address = enclaveData.deposit_address;
+            deposit.ua_length = enclaveData.deposit_address?.length || 0;
+            deposit.status = "AddressGenerated";
+            deposits.set(deposit_id, deposit);
+            console.log(`[Deposit] Generated UA for deposit #${deposit_id}: ${deposit.unified_address?.substring(0, 20)}...`);
+        } else {
+            console.error(`[Deposit] Failed to generate UA: ${await enclaveResponse.text()}`);
+        }
+    } catch (error) {
+        console.error(`[Deposit] Enclave call failed:`, error);
+        // Continue - deposit is created, UA can be set later
+    }
 
     console.log(`[Deposit] Created deposit intent #${deposit_id} for ${solana_recipient}`);
 

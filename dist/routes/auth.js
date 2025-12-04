@@ -100,15 +100,23 @@ authRouter.post("/verify-wallet", async (req, res) => {
     try {
         const publicKeyBytes = bs58.decode(solana_pubkey);
         const signatureBytes = Buffer.from(signed_message, "base64");
+        // Solana wallets sign with a specific prefix format
+        // The format is: "\x19Solana Signed Message:\n" + message_length + message
         const messageBytes = Buffer.from(message, "utf8");
-        const isValid = nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
+        const prefix = Buffer.from(`\x19Solana Signed Message:\n${messageBytes.length}`);
+        const fullMessage = Buffer.concat([prefix, messageBytes]);
+        const isValid = nacl.sign.detached.verify(fullMessage, signatureBytes, publicKeyBytes);
         if (!isValid) {
-            return res.status(401).json({
-                error: {
-                    code: "ERR_INVALID_SIGNATURE",
-                    message: "Signature verification failed",
-                },
-            });
+            // Try without prefix (for wallets that don't use it)
+            const isValidRaw = nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
+            if (!isValidRaw) {
+                return res.status(401).json({
+                    error: {
+                        code: "ERR_INVALID_SIGNATURE",
+                        message: "Signature verification failed",
+                    },
+                });
+            }
         }
     }
     catch (error) {
